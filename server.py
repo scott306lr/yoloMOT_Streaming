@@ -15,7 +15,7 @@ userConfig = {}
 
 
 app = Flask(__name__)
-# app.config['SECRET_KEY'] = 'secret!'
+app.config['SECRET_KEY'] = 'secret!'
 CORS(app, resources={r"/*": {"origins": "*"}})
 socketio = SocketIO(app, cors_allowed_origins="*")
 
@@ -32,11 +32,11 @@ def canny_modifier(frame):
 
 def draw_rectangles(frame, boxes, show_class_id):
     # draw rectangles
-    for i in range(len(show_class_id)):
-        if show_class_id[i] == 1:
-            for box in boxes[i]:
-                x1, y1, x2, y2 = box
-                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+    # for i in range(len(show_class_id)):
+    #     if show_class_id[i] == 1:
+    #         for box in boxes[i]:
+    #             x1, y1, x2, y2 = box
+    #             cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
     return frame
 
 #! To be implemented
@@ -60,7 +60,7 @@ def process_frame(frame, metadata, configs):
         pass
 
     # draw rectangles
-    frame = draw_rectangles(frame, metadata["boxes"], configs["show_class_id"])
+    # frame = draw_rectangles(frame, metadata["boxes"], configs["show_class_id"])
 
     # draw metadata
     frame = draw_metadata(frame, metadata)
@@ -70,13 +70,21 @@ def process_frame(frame, metadata, configs):
 
 def generate(myID):
     global outputFrame, lock_frame, metadata, userConfig  # ,user, lock_users
+    testConfig = {
+        "id": myID,
+        "resolution": "640x480",
+        "mode": "canny",
+        "play": True,
+        "show_class_id": [1 for i in range(80)],
+    }
 
     while True:
         with lock_frame:
             if (outputFrame is None):
                 continue
 
-            processedFrame = process_frame(outputFrame, userConfig[myID])
+            # replace testConfig with userConfig[myID]
+            processedFrame = process_frame(outputFrame, metadata, testConfig)
 
             (flag, encodedImage) = cv2.imencode(".jpg", processedFrame)
             if not flag:
@@ -92,9 +100,9 @@ def index():
         return render_template("index.html")
 
 # obtain id from the front end
-@app.route("/video_feed")
-def video_feed():
-    return Response(generate(request.args.get("id")), mimetype="multipart/x-mixed-replace; boundary=frame")
+@app.route("/<myID>/video_feed")
+def video_feed(myID):
+    return Response(generate(myID), mimetype="multipart/x-mixed-replace; boundary=frame")
 
 
 @socketio.on("connect")
@@ -181,11 +189,11 @@ def stream():
     cv2.destroyAllWindows()
 
 
-if __name__ == '__main__':
-    t = threading.Thread(target=stream)
-    t.daemon = True
-    t.start()
+# if __name__ == '__main__':
+t = threading.Thread(target=stream)
+t.daemon = True
+t.start()
 
-    socketio.run(app, debug=True, port=5001)
-    app.run(host="0.0.0.0", port="1234", debug=True,
-            threaded=True, use_reloader=False)
+# socketio.run(app, host="0.0.0.0", debug=True, port=5000)
+app.run(host="0.0.0.0", port="12345", debug=True,
+        threaded=True, use_reloader=False)

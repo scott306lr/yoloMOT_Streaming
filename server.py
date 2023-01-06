@@ -180,7 +180,8 @@ def stream():
         ret, frame = vid.read()
 
         with lock_frame:
-            outputFrame, metadata = frame, None  # run_model(frame)
+            # outputFrame, metadata = run_model(frame)
+            outputFrame, metadata = frame, None
 
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break

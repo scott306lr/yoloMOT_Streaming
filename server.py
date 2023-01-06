@@ -15,7 +15,7 @@ userConfig = {}
 
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'secret!'
+# app.config['SECRET_KEY'] = 'secret!'
 CORS(app, resources={r"/*": {"origins": "*"}})
 socketio = SocketIO(app, cors_allowed_origins="*")
 
@@ -43,12 +43,9 @@ def draw_rectangles(frame, boxes, show_class_id):
 
 
 def draw_metadata(frame, metadata):
-    # draw metadata
-    for i in range(len(metadata["boxes"])):
-        for box in metadata["boxes"][i]:
-            x1, y1, x2, y2 = box
-            cv2.putText(frame, metadata["class_names"][i], (x1, y1 - 5),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+    # detected boxes,
+    # draw metadata,
+    # draw fps etc....
     return frame
 
 

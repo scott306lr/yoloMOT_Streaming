@@ -32,6 +32,9 @@ def canny_modifier(frame):
 
 def draw_rectangles(frame, boxes, show_class_id):
     # draw rectangles
+
+    # draw only the passed "class id", and bboxes with "confidence" higher than specific threshold.
+
     # for i in range(len(show_class_id)):
     #     if show_class_id[i] == 1:
     #         for box in boxes[i]:
@@ -60,7 +63,7 @@ def process_frame(frame, metadata, configs):
         pass
 
     # draw rectangles
-    # frame = draw_rectangles(frame, metadata["boxes"], configs["show_class_id"])
+    # frame = draw_rectangles(frame, metadata["boxes"], configs)
 
     # draw metadata
     frame = draw_metadata(frame, metadata)
@@ -73,9 +76,9 @@ def generate(myID):
     testConfig = {
         "id": myID,
         "resolution": "640x480",
-        "mode": "canny",
+        "mode": "original",
         "play": True,
-        "show_class_id": [1 for i in range(80)],
+        "show_class_id": [1, 3, 5]  # need to draw class id == 1, 3, 5
     }
 
     while True:
@@ -180,8 +183,8 @@ def stream():
         ret, frame = vid.read()
 
         with lock_frame:
-            # outputFrame, metadata = run_model(frame)
-            outputFrame, metadata = frame, None
+            outputFrame, metadata = run_model(frame)
+            # outputFrame, metadata = frame, None
 
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break

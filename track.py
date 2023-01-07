@@ -62,8 +62,14 @@ TEMPLATE_DIR = "Frontend"#"templates"
 STATIC_DIR = "Frontend"
 app = Flask(__name__, template_folder=TEMPLATE_DIR, static_folder=STATIC_DIR)
 app.config['SECRET_KEY'] = 'secret!'
-CORS(app, resources={r"/*": {"origins": "*"}})
+app.config["DEBUG"] = True
+# CORS(app, resources={r"/*": {
+#     "origins": "*",
+#     "Access-Control-Allow-Origin": "*"
+# }})
 socketio = SocketIO(app, async_mode="gevent", cors_allowed_origins="*")
+# socketio = SocketIO(app)
+socketio.init_app(app, cors_allowed_origins="*")
 
 @torch.no_grad()
 def run(
@@ -292,7 +298,7 @@ def generate(myID):
     testConfig = {
         "id": myID,
         "resolution": "640x480",
-        "mode": "canny",
+        "mode": "original",
         "play": True,
         "show_class_id": [0, 1, 3]  # need to draw class id == 0, 1, 3
     }
@@ -312,11 +318,11 @@ def generate(myID):
                bytearray(encodedImage) + b'\r\n')
 
 
-@app.route("/", methods=['GET', 'POST'])
+@app.route('/')
 def index():
     # return the rendered template
     if request.method == "GET":
-        return render_template("index.html")
+        return render_template("index.html", async_mode=socketio.async_mode)
 
 # obtain id from the front end
 @app.route("/<myID>/video_feed")
@@ -356,12 +362,11 @@ def bullet(data):
 #     userConfig[request.sid]["resolution"] = data
 #     emit("resolution", {'data': data, 'id': request.sid}, broadcast=False)
 
-
+# play and pause
 @socketio.on('play_toggle')
-def play_toggle():
-    new_state = not userConfig[request.sid]["play"]
-    userConfig[request.sid]["play"] = new_state
-    emit("play", {'data': new_state, 'id': request.sid}, broadcast=False)
+def play_toggle(data):
+    userConfig[request.sid]["play"] = False if data == 'pause' else True
+    emit("play_toggle", {'data': new_state, 'id': request.sid}, broadcast=False)
 
 
 @socketio.on('show_class_id')
@@ -403,11 +408,10 @@ def main(opt):
     t.start()
     
     time.sleep(3)
-    # with model_load_lock:
     print("Opening host socket...")
     # socketio.run(app, host="0.0.0.0", debug=True, port=5000)
-    app.run(host="0.0.0.0", port="12345", debug=True,
-            threaded=True, use_reloader=False)
+    # socketio.run(app, host="0.0.0.0", debug=True, port=12345, threaded=True, use_reloader=False)
+    app.run(host="0.0.0.0", port="12345", debug=True, threaded=True, use_reloader=False)
 
 def parse_opt():
     parser = argparse.ArgumentParser()

@@ -4,16 +4,30 @@ const {
     selectAll
 } = d3;
 
-
 const selectRes = select('#selectResolution');
 const videoPlay = document.getElementById('mp4Player');
 var nowRes = "360p";
+
+
+var url = 'http://127.0.0.1';
+var port = '12345';
+
+var socket = null;
+
+$(document).ready(() => {
+
+	socket = io.connect();
+
+	socket.on('play_toggle', (data) => {
+		console.log(data);
+	});
+});
+
 
 function changeResolution() {
 	console.log("changeRes " + selectRes.property('value'));
 
 	nowRes = selectRes.property('value');
-
 
 };
 
@@ -21,15 +35,14 @@ var now_play = false;
 function play_pause() {
 	if (now_play) {
 		select('#playpause').text('Play');
-		videoPlay.pause();
+		socket.emit('play_toggle', 'pause');
 	}
 	else {
 		select('#playpause').text('Pause');
-		videoPlay.play();
+		socket.emit('play_toggle', 'play');
 	}
 	now_play = !now_play;
 };
-
 
 var now_filter = [];
 function applyFilter() {
@@ -108,27 +121,11 @@ for (var i = 0; i < Object.keys(classes_dic).length; i++) {
 		.attr('type', 'checkbox')
 		.attr('value', i);
 
+	if (i == 0) inp.property('checked', true);
+
 	now_div.append('label')
 		.attr('class', 'class-label')
 		.text(classes_dic[i]);
 
 	all_cls.push(inp);
 }
-
-
-
-// let url = 'ws://localhost:3001'
-// var ws = new WebSocket(url)
-
-// ws.onopen = () => {
-// 	console.log('open connection')
-// }
-// ws.onclose = () => {
-// 	console.log('close connection');
-// }
-
-// ws.onmessage = event => {
-// 	let txt = event.data;
-
-// 	console.log(txt);
-// }

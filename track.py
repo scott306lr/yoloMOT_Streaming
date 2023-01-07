@@ -13,6 +13,11 @@ import numpy as np
 from pathlib import Path
 import torch
 import torch.backends.cudnn as cudnn
+import subprocess as sp
+from flask import Flask, request, jsonify, Response, render_template
+from flask_socketio import SocketIO, emit
+from flask_cors import CORS
+import threading
 
 FILE = Path(__file__).resolve()
 ROOT = FILE.parents[0]  # yolov5 strongsort root directory
@@ -38,6 +43,21 @@ from trackers.multi_tracker_zoo import create_tracker
 
 # remove duplicated stream handler to avoid duplicated logging
 #logging.getLogger().removeHandler(logging.getLogger().handlers[0])
+
+
+global outputFrame
+global lock_frame
+global metadata
+lock_frame = threading.Lock()
+outputFrame = None
+metadata = None
+lock_users = threading.Lock()
+users = []
+userConfig = {}
+app = Flask(__name__)
+app.config['SECRET_KEY'] = 'secret!'
+CORS(app, resources={r"/*": {"origins": "*"}})
+socketio = SocketIO(app, cors_allowed_origins="*")
 
 @torch.no_grad()
 def run(
@@ -74,6 +94,12 @@ def run(
         vid_stride=1,  # video frame-rate stride
 ):
 
+
+    global outputFrame
+    global lock_frame
+    global metadata
+    global names
+    
     source = str(source)
     save_img = not nosave and not source.endswith('.txt')  # save inference images
     is_file = Path(source).suffix[1:] in (VID_FORMATS)
@@ -168,8 +194,9 @@ def run(
             txt_path = str(save_dir / 'tracks' / txt_file_name)  # im.txt
             s += '%gx%g ' % im.shape[2:]  # print string
             imc = im0.copy() if save_crop else im0  # for save_crop
-
-            annotator = Annotator(im0, line_width=line_thickness, example=str(names))
+            
+            # annotator = Annotator(im0, line_width=line_thickness, example=str(names))
+            frame_temp = im0.copy()
             
             if hasattr(tracker_list[i], 'tracker') and hasattr(tracker_list[i].tracker, 'camera_update'):
                 if prev_frames[i] is not None and curr_frames[i] is not None:  # camera motion compensation
@@ -190,76 +217,24 @@ def run(
                 t5 = time_sync()
                 dt[3] += t5 - t4
                 
+                metadata_temp = []
                 # draw boxes for visualization
                 if len(outputs[i]) > 0:
                     for j, (output, conf) in enumerate(zip(outputs[i], det[:, 4])):
-    
                         bboxes = output[0:4]
                         id = output[4]
                         cls = output[5]
-
-                        if save_txt:
-                            # to MOT format
-                            bbox_left = output[0]
-                            bbox_top = output[1]
-                            bbox_w = output[2] - output[0]
-                            bbox_h = output[3] - output[1]
-                            # Write MOT compliant results to file
-                            with open(txt_path + '.txt', 'a') as f:
-                                f.write(('%g ' * 10 + '\n') % (frame_idx + 1, id, bbox_left,  # MOT format
-                                                               bbox_top, bbox_w, bbox_h, -1, -1, -1, i))
-
-                        if save_vid or save_crop or show_vid:  # Add bbox to image
-                            c = int(cls)  # integer class
-                            id = int(id)  # integer id
-                            label = None if hide_labels else (f'{id} {names[c]}' if hide_conf else \
-                                (f'{id} {conf:.2f}' if hide_class else f'{id} {names[c]} {conf:.2f}'))
-                            color = colors(c, True)
-                            annotator.box_label(bboxes, label, color=color)
-                            if save_trajectories:
-                                tracker_list[i].trajectory(im0, tracker_list[i].tracker.tracks, color=color)
-                            if save_crop:
-                                txt_file_name = txt_file_name if (isinstance(path, list) and len(path) > 1) else ''
-                                save_one_box(bboxes, imc, file=save_dir / 'crops' / txt_file_name / names[c] / f'{id}' / f'{p.stem}.jpg', BGR=True)
+                        metadata_temp.append({'box':bboxes, 'id':id, 'cls':int(cls), 'conf':conf})
 
                 LOGGER.info(f'{s}Done. yolo:({t3 - t2:.3f}s), {tracking_method}:({t5 - t4:.3f}s)')
                 
             else:
                 LOGGER.info('No detections')
-                #tracker_list[i].tracker.pred_n_update_all_tracks()
-                
-            # Stream results
-            im0 = annotator.result()
-            if show_vid:
-                cv2.imshow(str(p), im0)
-                cv2.waitKey(1)  # 1 millisecond
 
-            # Save results (image with detections)
-            if save_vid:
-                if vid_path[i] != save_path:  # new video
-                    vid_path[i] = save_path
-                    if isinstance(vid_writer[i], cv2.VideoWriter):
-                        vid_writer[i].release()  # release previous video writer
-                    if vid_cap:  # video
-                        fps = vid_cap.get(cv2.CAP_PROP_FPS)
-                        w = int(vid_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-                        h = int(vid_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-                    else:  # stream
-                        fps, w, h = 30, im0.shape[1], im0.shape[0]
-                    save_path = str(Path(save_path).with_suffix('.mp4'))  # force *.mp4 suffix on results videos
-                    vid_writer[i] = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
-                vid_writer[i].write(im0)
+            with lock_frame:
+                outputFrame, metadata = frame_temp, metadata_temp
 
             prev_frames[i] = curr_frames[i]
-
-    # Print results
-    t = tuple(x / seen * 1E3 for x in dt)  # speeds per image
-    LOGGER.info(f'Speed: %.1fms pre-process, %.1fms inference, %.1fms NMS, %.1fms {tracking_method} update per image at shape {(1, 3, *imgsz)}' % t)
-    if save_txt or save_vid:
-        s = f"\n{len(list(save_dir.glob('tracks/*.txt')))} tracks saved to {save_dir / 'tracks'}" if save_txt else ''
-        LOGGER.info(f"Results saved to {colorstr('bold', save_dir)}{s}")
-    if update:
-        strip_optimizer(yolo_weights)  # update model (to fix SourceChangeWarning)
 
 
 def parse_opt():
@@ -291,7 +266,7 @@ def parse_opt():
     parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
     parser.add_argument('--line-thickness', default=2, type=int, help='bounding box thickness (pixels)')
     parser.add_argument('--hide-labels', default=False, action='store_true', help='hide labels')
-    parser.add_argument('--hide-conf', default=False, action='store_true', help='hide confidences')
+    parser.add_argument('--hide-conf', default=True, action='store_true', help='hide confidences')
     parser.add_argument('--hide-class', default=False, action='store_true', help='hide IDs')
     parser.add_argument('--half', action='store_true', help='use FP16 half-precision inference')
     parser.add_argument('--dnn', action='store_true', help='use OpenCV DNN for ONNX inference')
@@ -302,9 +277,181 @@ def parse_opt():
     return opt
 
 
+def canny_modifier(frame):
+    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    frame = cv2.Canny(frame, 50, 100)
+    frame = cv2.dilate(frame, None, iterations=1)
+    frame = cv2.erode(frame, None, iterations=1)
+    return frame
+
+#! To be implemented
+
+
+def draw_rectangles(frame, boxes, show_class_id):
+    global names
+    # draw rectangles
+
+    # draw only the passed "class id", and bboxes with "confidence" higher than specific threshold.
+    annotator = Annotator(frame, line_width=2, example=str(names))
+    for box in boxes:
+        c = box['cls']
+        if c not in show_class_id:
+            continue
+        label = f"{box['id']} {names[c]} {box['conf']:.2f}"
+        color = colors(c, True)
+        annotator.box_label(box['box'], label, color=color)
+    im0 = annotator.result()
+    
+    return im0
+
+#! To be implemented
+
+
+def draw_metadata(frame, metadata):
+    # detected boxes,
+    # draw metadata,
+    # draw fps etc....
+    return frame
+
+
+def process_frame(frame, metadata, configs):
+    # frame mode
+    case = configs["mode"]
+    if case == "original":
+        pass
+    elif case == "canny":
+        frame = canny_modifier(frame)
+    else:
+        pass
+
+    # draw rectangles
+    frame = draw_rectangles(frame, metadata, configs['show_class_id'])
+
+    # draw metadata
+    frame = draw_metadata(frame, metadata)
+
+    return frame
+
+
+def generate(myID):
+    global outputFrame, lock_frame, metadata, userConfig  # ,user, lock_users
+    testConfig = {
+        "id": myID,
+        "resolution": "640x480",
+        "mode": "original",
+        "play": True,
+        "show_class_id": [0, 1, 3]  # need to draw class id == 0, 1, 3
+    }
+
+    while True:
+        with lock_frame:
+            if (outputFrame is None):
+                continue
+
+            # replace testConfig with userConfig[myID]
+            processedFrame = process_frame(outputFrame, metadata, testConfig)
+
+            (flag, encodedImage) = cv2.imencode(".jpg", processedFrame)
+            if not flag:
+                continue
+        yield (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' +
+               bytearray(encodedImage) + b'\r\n')
+
+
+@app.route("/", methods=['GET', 'POST'])
+def index():
+    # return the rendered template
+    if request.method == "GET":
+        return render_template("index.html")
+
+# obtain id from the front end
+@app.route("/<myID>/video_feed")
+def video_feed(myID):
+    return Response(generate(myID), mimetype="multipart/x-mixed-replace; boundary=frame")
+
+
+@socketio.on("connect")
+def connected():
+    """event listener when client connects to the server"""
+    with lock_users:
+        users.append(request.sid)
+    userConfig[request.sid] = {
+        "id": request.sid,
+        "resolution": "640x480",
+        "mode": "original",
+        "play": True,
+        "show_class_id": [1 for i in range(80)],
+    }
+
+    print(f"client with id:{request.sid} has connected")
+    emit("connect", {'data': f"user {request.sid} connected",
+                     'id': request.sid}, broadcast=True)
+
+
+@socketio.on("bullet")
+def bullet(data):
+    """event listener when client types a message"""
+    print(f"user {request.sid} fired a bullet:\n {data}")
+    emit("bullet", {'data': data, 'id': request.sid}, broadcast=True)
+
+
+# @socketio.on('resolution')
+# def change_resolution(data):
+#     """event listener when client types a message"""
+#     print("data from the front end: ", str(data))
+#     userConfig[request.sid]["resolution"] = data
+#     emit("resolution", {'data': data, 'id': request.sid}, broadcast=False)
+
+
+@socketio.on('play_toggle')
+def play_toggle():
+    new_state = not userConfig[request.sid]["play"]
+    userConfig[request.sid]["play"] = new_state
+    emit("play", {'data': new_state, 'id': request.sid}, broadcast=False)
+
+
+@socketio.on('show_class_id')
+def change_show_class_id(data):
+    """event listener when client types a message"""
+    print("data from the front end: ", str(data))
+    userConfig[request.sid]["show_class_id"] = data
+    emit("show_class_id", {'data': data, 'id': request.sid}, broadcast=False)
+
+
+@socketio.on('mode')
+def change_mode(data):
+    """event listener when client types a message"""
+    print("data from the front end: ", str(data))
+    userConfig[request.sid]["mode"] = data
+    emit("mode", {'data': data, 'id': request.sid}, broadcast=False)
+
+
+@socketio.on("disconnect")
+def disconnected():
+    """event listener when client disconnects to the server"""
+    with lock_users:
+        users.remove(request.sid)
+    del userConfig[request.sid]
+    print(f"client with id:{request.sid} has disconnected")
+    emit("disconnect", {
+         'data': f"user {request.sid} disconnected", 'id': request.sid}, broadcast=True)
+
+
+
 def main(opt):
     check_requirements(requirements=ROOT / 'requirements.txt', exclude=('tensorboard', 'thop'))
-    run(**vars(opt))
+
+    global outputFrame
+    global lock_frame
+    global metadata
+    global names
+    t = threading.Thread(target=run, kwargs=vars(opt))
+    t.daemon = True
+    t.start()
+    # socketio.run(app, host="0.0.0.0", debug=True, port=5000)
+    app.run(host="0.0.0.0", port="12345", debug=True,
+            threaded=True, use_reloader=False)
+    # run(**vars(opt))
 
 
 if __name__ == "__main__":

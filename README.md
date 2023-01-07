@@ -8,7 +8,7 @@ cd yoloMOT_Streaming
 
 create new conda environment and activate it
 ```bash
-conda create --name yoloMOT
+conda create --name yoloMOT python=3.10
 conda activate yoloMOT
 ```
 

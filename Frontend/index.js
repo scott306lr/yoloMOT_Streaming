@@ -31,15 +31,18 @@ function changeResolution() {
 
 };
 
-var now_play = false;
+var now_play = true;
 function play_pause() {
+	console.log('play_pause!')
 	if (now_play) {
 		select('#playpause').text('Play');
 		socket.emit('play_toggle', 'pause');
+		console.log('emit: ', 'pause')
 	}
 	else {
 		select('#playpause').text('Pause');
 		socket.emit('play_toggle', 'play');
+		console.log('emit: ', 'play')
 	}
 	now_play = !now_play;
 };

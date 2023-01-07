@@ -2,12 +2,12 @@ import argparse
 import os
 import time
 
-# limit the number of cpus used by high performance libraries
-os.environ["OMP_NUM_THREADS"] = "1"
-os.environ["OPENBLAS_NUM_THREADS"] = "1"
-os.environ["MKL_NUM_THREADS"] = "1"
-os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
-os.environ["NUMEXPR_NUM_THREADS"] = "1"
+# # limit the number of cpus used by high performance libraries
+# os.environ["OMP_NUM_THREADS"] = "1"
+# os.environ["OPENBLAS_NUM_THREADS"] = "1"
+# os.environ["MKL_NUM_THREADS"] = "1"
+# os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
+# os.environ["NUMEXPR_NUM_THREADS"] = "1"
 
 import sys
 import numpy as np
@@ -19,6 +19,7 @@ from flask import Flask, request, jsonify, Response, render_template
 from flask_socketio import SocketIO, emit
 from flask_cors import CORS
 import threading
+
 
 FILE = Path(__file__).resolve()
 ROOT = FILE.parents[0]  # yolov5 strongsort root directory
@@ -60,14 +61,15 @@ userConfig = {}
 
 TEMPLATE_DIR = "Frontend"#"templates"
 STATIC_DIR = "Frontend"
+# ASYNC_MODE = "eventlet"
 app = Flask(__name__, template_folder=TEMPLATE_DIR, static_folder=STATIC_DIR)
 app.config['SECRET_KEY'] = 'secret!'
-app.config["DEBUG"] = True
+# app.config["DEBUG"] = True
 # CORS(app, resources={r"/*": {
 #     "origins": "*",
 #     "Access-Control-Allow-Origin": "*"
 # }})
-socketio = SocketIO(app, async_mode="gevent", cors_allowed_origins="*")
+socketio = SocketIO(app, cors_allowed_origins="*") #async_mode=ASYNC_MODE, 
 # socketio = SocketIO(app)
 socketio.init_app(app, cors_allowed_origins="*")
 
@@ -96,7 +98,7 @@ def run(
     global lock_frame
     global metadata
     global names
- 
+
     source = str(source)
     is_file = Path(source).suffix[1:] in (VID_FORMATS)
     is_url = source.lower().startswith(('rtsp://', 'rtmp://', 'http://', 'https://'))
@@ -222,7 +224,7 @@ def run(
                         bboxes = output[0:4]
                         id = output[4]
                         cls = output[5]
-                        metadata_temp.append({'box':bboxes, 'id':id, 'cls':int(cls), 'conf':conf})
+                        metadata_temp.append({'box':bboxes, 'id':int(id), 'cls':int(cls), 'conf':conf})
 
                 # LOGGER.info(f'{s}Done. yolo:({t3 - t2:.3f}s), {tracking_method}:({t5 - t4:.3f}s)')
                 
@@ -292,26 +294,30 @@ def process_frame(frame, metadata, configs):
 
     return frame
 
-
-def generate(myID):
-    global outputFrame, lock_frame, metadata, userConfig  # ,user, lock_users
-    testConfig = {
-        "id": myID,
+testConfig = {
+        "id": '0',
         "resolution": "640x480",
         "mode": "original",
         "play": True,
-        "show_class_id": [0, 1, 3]  # need to draw class id == 0, 1, 3
+        "show_class_id": [i for i in range(80)]  # need to draw class id == 0, 1, 3
     }
 
+def generate(myID):
+    global outputFrame, lock_frame, metadata, userConfig  # ,user, lock_users
+    global testConfig
+
+    prev_frame = None
     while True:
         with lock_frame:
             if (outputFrame is None):
                 continue
 
             # replace testConfig with userConfig[myID]
-            processedFrame = process_frame(outputFrame, metadata, testConfig)
+            if testConfig["play"] == True or prev_frame is None:
+                processedFrame = process_frame(outputFrame, metadata, testConfig)
+                prev_frame = processedFrame
 
-            (flag, encodedImage) = cv2.imencode(".jpg", processedFrame)
+            (flag, encodedImage) = cv2.imencode(".jpg", prev_frame)
             if not flag:
                 continue
         yield (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' +
@@ -322,7 +328,7 @@ def generate(myID):
 def index():
     # return the rendered template
     if request.method == "GET":
-        return render_template("index.html", async_mode=socketio.async_mode)
+        return render_template("index.html")#, async_mode=socketio.async_mode)
 
 # obtain id from the front end
 @app.route("/<myID>/video_feed")
@@ -365,8 +371,10 @@ def bullet(data):
 # play and pause
 @socketio.on('play_toggle')
 def play_toggle(data):
-    userConfig[request.sid]["play"] = False if data == 'pause' else True
-    emit("play_toggle", {'data': new_state, 'id': request.sid}, broadcast=False)
+    # userConfig[request.sid]["play"] = False if data == 'pause' else True
+    testConfig["play"] = False if data == 'pause' else True
+    print(f"got play/pause {data}")
+    emit("play_toggle", {'data': data, 'id': request.sid}, broadcast=False)
 
 
 @socketio.on('show_class_id')
@@ -410,8 +418,7 @@ def main(opt):
     time.sleep(3)
     print("Opening host socket...")
     # socketio.run(app, host="0.0.0.0", debug=True, port=5000)
-    # socketio.run(app, host="0.0.0.0", debug=True, port=12345, threaded=True, use_reloader=False)
-    app.run(host="0.0.0.0", port="12345", debug=True, threaded=True, use_reloader=False)
+    socketio.run(app, host="0.0.0.0", port=12345, debug=True, use_reloader=False)
 
 def parse_opt():
     parser = argparse.ArgumentParser()

@@ -17,31 +17,15 @@ torchvision>=0.8.1
 tqdm>=4.64.0
 # protobuf<=3.20.1  # https://github.com/ultralytics/yolov5/issues/8012
 
-# Logging ---------------------------------------------------------------------
-tensorboard>=2.4.1
-# clearml>=1.2.0
-# comet
-
-# Plotting --------------------------------------------------------------------
-pandas>=1.1.4
-seaborn>=0.11.0
-
-# StrongSORT ------------------------------------------------------------------
-easydict
 
 # torchreid -------------------------------------------------------------------
 gdown
 
-# ByteTrack -------------------------------------------------------------------
-lap
-git+https://github.com/samson-wang/cython_bbox.git@9badb346a9222c98f828ba45c63fe3b7f2790ea2
-
 # OCSORT ----------------------------------------------------------------------
 filterpy
 
-# Export ----------------------------------------------------------------------
-# onnx>=1.9.0  # ONNX export
-# onnx-simplifier>=0.4.1  # ONNX simplifier
-# nvidia-pyindex  # TensorRT export
-# nvidia-tensorrt  # TensorRT export
-# openvino-dev  # OpenVINO export
+# Flask & Websocket
+flask
+flask-socketio
+eventlet
+flask_cors

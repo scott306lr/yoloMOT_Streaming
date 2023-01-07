@@ -2,8 +2,8 @@
 
 clone this repo and cd into it
 ```bash
-$ git clone
-$ cd
+$ git clone --recursive git@github.com:scott306lr/yoloMOT_Streaming.git
+$ cd yoloMOT_Streaming
 ```
 
 create new conda environment and activate it
@@ -17,10 +17,14 @@ install requirements
 $ pip install -r requirements.txt
 ```
 
+If not cloned recursively
 clone submodule (yolov5)
 ```bash
-git submodule update --init --recursive
+$ git submodule update --init --recursive
 ```
 
 
-
+Run
+```bash
+$ python track.py
+```

@@ -6,7 +6,7 @@ const {
 
 const selectRes = select('#selectResolution');
 const videoPlay = document.getElementById('mp4Player');
-var nowRes = "360p";
+var nowRes = "480p";
 
 
 var url = 'http://127.0.0.1';
@@ -44,6 +44,10 @@ function changeResolution() {
 		socket.emit('resolution', '480p');
 	if (nowRes == '360p')
 		socket.emit('resolution', '360p');
+	if (nowRes == '720p')
+		socket.emit('resolution', '720p');
+	if (nowRes == '1080p')
+		socket.emit('resolution', '108p');
 };
 
 var now_play = true;
@@ -99,7 +103,7 @@ select('#playpause').on('click', play_pause);
 select('#saveClass').on('click', selectClass);
 select('#saveFilter').on('click', applyFilter);
 
-let resolutions = ['360p', '480p'];
+let resolutions = ['360p', '480p', '720p', '1080p'];
 
 let slc_res = select('#selectResolution');
 for (var i in resolutions) {

@@ -257,7 +257,7 @@ def draw_rectangles(frame, boxes, show_class_id, confidence):
         c = box['cls']
         if c not in show_class_id:
             continue
-        if box['conf'].numpy() < confidence:
+        if box['conf'].cpu().numpy() < confidence:
             # print("Out by confidence", box['conf'].numpy(), confidence)
             continue
         label = f"{box['id']} {names[c]} {box['conf']:.2f}"
@@ -277,6 +277,12 @@ def draw_metadata(frame, metadata, resolution):
 
     if (resolution == '480p'):
         frame = cv2.resize(frame, (640, 480))
+    
+    if (resolution == '720p'):
+        frame = cv2.resize(frame, (960, 720))
+    
+    if (resolution == '1080p'):
+        frame = cv2.resize(frame, (1440, 1080))
 
     return frame
 
@@ -304,14 +310,16 @@ def generate(myID):
 
     prev_frame = None
     while True:
+        with lock_users:
+            myConfig = userConfig[myID]
+
         with lock_frame:
             if (outputFrame is None):
                 continue
 
-            # replace testConfig with userConfig[myID]
-            if userConfig[myID]["play"] == True or prev_frame is None:
-                processedFrame = process_frame(outputFrame, metadata, userConfig[myID])
-                prev_frame = processedFrame
+            if myConfig["play"] == True or prev_frame is None:
+                processedFrame = process_frame(outputFrame.copy(), metadata, myConfig)
+                prev_frame = processedFrame.copy()
 
             (flag, encodedImage) = cv2.imencode(".jpg", prev_frame)
             if not flag:
@@ -330,15 +338,14 @@ def index():
         
         with lock_users:
             users.append(session.get('ID'))
-
-        userConfig[session.get('ID')] = {
-            "id": session.get('ID'),
-            "resolution": "480p",
-            "mode": "original",
-            "confidence": 0.5,
-            "play": True,
-            "show_class_id": [ i for i in range(0, 80) ]
-        }
+            userConfig[session.get('ID')] = {
+                "id": session.get('ID'),
+                "resolution": "480p",
+                "mode": "original",
+                "confidence": 0.5,
+                "play": True,
+                "show_class_id": [ i for i in range(0, 80) ]
+            }
         with open('./Frontend/index.html', 'r') as file:
             data = file.read().rstrip()
             data = data.replace('USER_DEF_ID', new_user_id)
@@ -368,37 +375,40 @@ def connected():
 
 @socketio.on("confidence")
 def confidence(data):
-    userConfig[session.get('ID')]["confidence"] = float(data)
+    with lock_users:
+        userConfig[session.get('ID')]["confidence"] = float(data)
     emit("confidence", {'data': data, 'id': session.get('ID')}, broadcast=False)
 
 
 @socketio.on('resolution')
 def change_resolution(data):
     print("data from the front end: ", str(data))
-    userConfig[session.get('ID')]["resolution"] = data
+    with lock_users:
+        userConfig[session.get('ID')]["resolution"] = data
     emit("resolution", {'data': data, 'id': session.get('ID')}, broadcast=False)
 
 # play and pause
 @socketio.on('play_toggle')
 def play_toggle(data):
-    userConfig[session.get('ID')]["play"] = False if data == 'pause' else True
+    with lock_users:
+        userConfig[session.get('ID')]["play"] = False if data == 'pause' else True
     print(f"got play/pause {data}")
     emit("play_toggle", {'data': data, 'id': session.get('ID')}, broadcast=False)
 
 
 @socketio.on('show_class_id')
 def change_show_class_id(data):
-    """event listener when client types a message"""
+    with lock_users:
+        userConfig[session.get('ID')]["show_class_id"] = list(map(int, data))
     print("data from the front end: ", str(data))
-    userConfig[session.get('ID')]["show_class_id"] = list(map(int, data))
     emit("show_class_id", {'data': data, 'id': session.get('ID')}, broadcast=False)
 
 
 @socketio.on('mode')
 def change_mode(data):
-    """event listener when client types a message"""
+    with lock_users:
+        userConfig[session.get('ID')]["mode"] = data
     print("data from the front end: ", str(data))
-    userConfig[session.get('ID')]["mode"] = data
     emit("mode", {'data': data, 'id': session.get('ID')}, broadcast=False)
 
 
@@ -407,7 +417,7 @@ def disconnected():
     """event listener when client disconnects to the server"""
     with lock_users:
         users.remove(session.get('ID'))
-    del userConfig[session.get('ID')]
+        del userConfig[session.get('ID')]
     print(f"client with id:{session.get('ID')} has disconnected")
     emit("disconnect", {
          'data': f"user {session.get('ID')} disconnected", 'id': session.get('ID')}, broadcast=True)

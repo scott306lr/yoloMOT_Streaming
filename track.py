@@ -246,10 +246,8 @@ def canny_modifier(frame):
     frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
     return frame
 
-#! To be implemented
 
-
-def draw_rectangles(frame, boxes, show_class_id):
+def draw_rectangles(frame, boxes, show_class_id, confidence):
     global names
     # draw rectangles
 
@@ -259,20 +257,27 @@ def draw_rectangles(frame, boxes, show_class_id):
         c = box['cls']
         if c not in show_class_id:
             continue
+        if box['conf'].numpy() < confidence:
+            # print("Out by confidence", box['conf'].numpy(), confidence)
+            continue
         label = f"{box['id']} {names[c]} {box['conf']:.2f}"
         color = colors(c, True)
         annotator.box_label(box['box'], label, color=color)
     im0 = annotator.result()
-    
     return im0
 
-#! To be implemented
 
-
-def draw_metadata(frame, metadata):
+def draw_metadata(frame, metadata, resolution):
     # detected boxes,
     # draw metadata,
     # draw fps etc....
+
+    if (resolution == '360p'):
+        frame = cv2.resize(frame, (480, 360))
+
+    if (resolution == '480p'):
+        frame = cv2.resize(frame, (640, 480))
+
     return frame
 
 
@@ -287,24 +292,15 @@ def process_frame(frame, metadata, configs):
         pass
 
     # draw rectangles
-    frame = draw_rectangles(frame, metadata, configs['show_class_id'])
+    frame = draw_rectangles(frame, metadata, configs['show_class_id'], configs['confidence'])
 
     # draw metadata
-    frame = draw_metadata(frame, metadata)
+    frame = draw_metadata(frame, metadata, configs['resolution'])
 
     return frame
 
-testConfig = {
-        "id": '0',
-        "resolution": "640x480",
-        "mode": "original",
-        "play": True,
-        "show_class_id": [i for i in range(80)]  # need to draw class id == 0, 1, 3
-    }
-
 def generate(myID):
     global outputFrame, lock_frame, metadata, userConfig  # ,user, lock_users
-    global testConfig
 
     prev_frame = None
     while True:
@@ -323,13 +319,6 @@ def generate(myID):
         yield (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' +
                bytearray(encodedImage) + b'\r\n')
 
-
-# @app.route('/')
-# def index():
-#     # return the rendered template
-#     if request.method == "GET":
-#         return render_template("index.html")#, async_mode=socketio.async_mode)
-
 from uuid import uuid4
 
 @app.route('/')
@@ -344,10 +333,11 @@ def index():
 
         userConfig[session.get('ID')] = {
             "id": session.get('ID'),
-            "resolution": "640x480",
+            "resolution": "480p",
             "mode": "original",
+            "confidence": 0.5,
             "play": True,
-            "show_class_id": [0],
+            "show_class_id": [ i for i in range(0, 80) ]
         }
         with open('./Frontend/index.html', 'r') as file:
             data = file.read().rstrip()
@@ -364,31 +354,34 @@ def video_feed(myID):
 @socketio.on("connect")
 def connected():
     """event listener when client connects to the server"""
-
     print(f"client with id:{session.get('ID')} has connected")
     emit("connect", {'data': f"user {session.get('ID')} connected",
                      'id': session.get('ID')}, broadcast=True)
 
 
-@socketio.on("bullet")
-def bullet(data):
-    """event listener when client types a message"""
-    print(f"user {session.get('ID')} fired a bullet:\n {data}")
-    emit("bullet", {'data': data, 'id': session.get('ID')}, broadcast=True)
+# @socketio.on("bullet")
+# def bullet(data):
+#     print(f"user {session.get('ID')} fired a bullet:\n {data}")
+#     emit("bullet", {'data': data, 'id': session.get('ID')}, broadcast=True)
 
 
-# @socketio.on('resolution')
-# def change_resolution(data):
-#     """event listener when client types a message"""
-#     print("data from the front end: ", str(data))
-#     userConfig[session.get('ID')]["resolution"] = data
-#     emit("resolution", {'data': data, 'id': session.get('ID')}, broadcast=False)
+
+@socketio.on("confidence")
+def confidence(data):
+    userConfig[session.get('ID')]["confidence"] = float(data)
+    emit("confidence", {'data': data, 'id': session.get('ID')}, broadcast=False)
+
+
+@socketio.on('resolution')
+def change_resolution(data):
+    print("data from the front end: ", str(data))
+    userConfig[session.get('ID')]["resolution"] = data
+    emit("resolution", {'data': data, 'id': session.get('ID')}, broadcast=False)
 
 # play and pause
 @socketio.on('play_toggle')
 def play_toggle(data):
     userConfig[session.get('ID')]["play"] = False if data == 'pause' else True
-    # testConfig["play"] = False if data == 'pause' else True
     print(f"got play/pause {data}")
     emit("play_toggle", {'data': data, 'id': session.get('ID')}, broadcast=False)
 
@@ -397,7 +390,7 @@ def play_toggle(data):
 def change_show_class_id(data):
     """event listener when client types a message"""
     print("data from the front end: ", str(data))
-    userConfig[session.get('ID')]["show_class_id"] = data
+    userConfig[session.get('ID')]["show_class_id"] = list(map(int, data))
     emit("show_class_id", {'data': data, 'id': session.get('ID')}, broadcast=False)
 
 

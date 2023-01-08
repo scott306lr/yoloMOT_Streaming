@@ -23,9 +23,6 @@ $(document).ready(() => {
 
 	socket.once('connect', (data) => {
 		console.log(data);
-
-		// select('#mp4Player').attr('src', "{{ url_for('video_feed', myID='0') }}")
-		// select('#mp4Player').attr('src', "/0/video_feed")
 	});
 
 	socket.on('play_toggle', (data) => {
@@ -43,6 +40,10 @@ function changeResolution() {
 
 	nowRes = selectRes.property('value');
 
+	if (nowRes == '480p')
+		socket.emit('resolution', '480p');
+	if (nowRes == '360p')
+		socket.emit('resolution', '360p');
 };
 
 var now_play = true;
@@ -87,6 +88,8 @@ function selectClass() {
 	}
 	now_conf = 0.01 * select('#confOutput').property('value');
 
+	socket.emit('show_class_id', now_classes);
+	socket.emit('confidence', now_conf);
 
 	console.log('Confidence ', now_conf, ' ,select class ', now_classes);
 };
@@ -140,7 +143,7 @@ for (var i = 0; i < Object.keys(classes_dic).length; i++) {
 		.attr('type', 'checkbox')
 		.attr('value', i);
 
-	if (i == 0) inp.property('checked', true);
+	inp.property('checked', true);
 
 	now_div.append('label')
 		.attr('class', 'class-label')

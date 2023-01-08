@@ -16,11 +16,25 @@ var socket = null;
 
 $(document).ready(() => {
 
-	socket = io.connect();
+	console.log('connecting...')
+
+	socket = io.connect();	
+	console.log(socket)
+
+	socket.once('connect', (data) => {
+		console.log(data);
+
+		// select('#mp4Player').attr('src', "{{ url_for('video_feed', myID='0') }}")
+		// select('#mp4Player').attr('src', "/0/video_feed")
+	});
 
 	socket.on('play_toggle', (data) => {
 		console.log(data);
 	});
+
+	socket.on('mode', (data) => {
+		console.log(data);
+	})
 });
 
 
@@ -33,16 +47,15 @@ function changeResolution() {
 
 var now_play = true;
 function play_pause() {
-	console.log('play_pause!')
+	console.log(socket)
+
 	if (now_play) {
 		select('#playpause').text('Play');
 		socket.emit('play_toggle', 'pause');
-		console.log('emit: ', 'pause')
 	}
 	else {
 		select('#playpause').text('Pause');
 		socket.emit('play_toggle', 'play');
-		console.log('emit: ', 'play')
 	}
 	now_play = !now_play;
 };
@@ -51,11 +64,14 @@ var now_filter = [];
 function applyFilter() {
 	let s = select('#switchBW').select('input')
 
-	if (s.property('checked')) 
+	if (s.property('checked')) {
 		now_filter = [0];
-	else
+		socket.emit('mode', 'canny');
+	}
+	else {
 		now_filter = [];
-
+		socket.emit('mode', 'original');
+	}
 
 	console.log("applyFilter ", now_filter)
 }

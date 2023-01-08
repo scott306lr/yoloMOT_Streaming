@@ -15,11 +15,11 @@ from pathlib import Path
 import torch
 import torch.backends.cudnn as cudnn
 import subprocess as sp
-from flask import Flask, request, jsonify, Response, render_template
+from flask import Flask, request, jsonify, Response, render_template, render_template_string, session
 from flask_socketio import SocketIO, emit
 from flask_cors import CORS
 import threading
-
+import random 
 
 FILE = Path(__file__).resolve()
 ROOT = FILE.parents[0]  # yolov5 strongsort root directory
@@ -313,8 +313,8 @@ def generate(myID):
                 continue
 
             # replace testConfig with userConfig[myID]
-            if testConfig["play"] == True or prev_frame is None:
-                processedFrame = process_frame(outputFrame, metadata, testConfig)
+            if userConfig[myID]["play"] == True or prev_frame is None:
+                processedFrame = process_frame(outputFrame, metadata, userConfig[myID])
                 prev_frame = processedFrame
 
             (flag, encodedImage) = cv2.imencode(".jpg", prev_frame)
@@ -324,11 +324,36 @@ def generate(myID):
                bytearray(encodedImage) + b'\r\n')
 
 
+# @app.route('/')
+# def index():
+#     # return the rendered template
+#     if request.method == "GET":
+#         return render_template("index.html")#, async_mode=socketio.async_mode)
+
+from uuid import uuid4
+
 @app.route('/')
 def index():
     # return the rendered template
     if request.method == "GET":
-        return render_template("index.html")#, async_mode=socketio.async_mode)
+        new_user_id = str(uuid4())
+        session["ID"] = new_user_id
+        
+        with lock_users:
+            users.append(session.get('ID'))
+
+        userConfig[session.get('ID')] = {
+            "id": session.get('ID'),
+            "resolution": "640x480",
+            "mode": "original",
+            "play": True,
+            "show_class_id": [0],
+        }
+        with open('./Frontend/index.html', 'r') as file:
+            data = file.read().rstrip()
+            data = data.replace('USER_DEF_ID', new_user_id)
+            return render_template_string(data)
+        # return render_template("index.html")
 
 # obtain id from the front end
 @app.route("/<myID>/video_feed")
@@ -339,69 +364,60 @@ def video_feed(myID):
 @socketio.on("connect")
 def connected():
     """event listener when client connects to the server"""
-    with lock_users:
-        users.append(request.sid)
-    userConfig[request.sid] = {
-        "id": request.sid,
-        "resolution": "640x480",
-        "mode": "original",
-        "play": True,
-        "show_class_id": [1 for i in range(80)],
-    }
 
-    print(f"client with id:{request.sid} has connected")
-    emit("connect", {'data': f"user {request.sid} connected",
-                     'id': request.sid}, broadcast=True)
+    print(f"client with id:{session.get('ID')} has connected")
+    emit("connect", {'data': f"user {session.get('ID')} connected",
+                     'id': session.get('ID')}, broadcast=True)
 
 
 @socketio.on("bullet")
 def bullet(data):
     """event listener when client types a message"""
-    print(f"user {request.sid} fired a bullet:\n {data}")
-    emit("bullet", {'data': data, 'id': request.sid}, broadcast=True)
+    print(f"user {session.get('ID')} fired a bullet:\n {data}")
+    emit("bullet", {'data': data, 'id': session.get('ID')}, broadcast=True)
 
 
 # @socketio.on('resolution')
 # def change_resolution(data):
 #     """event listener when client types a message"""
 #     print("data from the front end: ", str(data))
-#     userConfig[request.sid]["resolution"] = data
-#     emit("resolution", {'data': data, 'id': request.sid}, broadcast=False)
+#     userConfig[session.get('ID')]["resolution"] = data
+#     emit("resolution", {'data': data, 'id': session.get('ID')}, broadcast=False)
 
 # play and pause
 @socketio.on('play_toggle')
 def play_toggle(data):
-    # userConfig[request.sid]["play"] = False if data == 'pause' else True
-    testConfig["play"] = False if data == 'pause' else True
+    userConfig[session.get('ID')]["play"] = False if data == 'pause' else True
+    # testConfig["play"] = False if data == 'pause' else True
     print(f"got play/pause {data}")
-    emit("play_toggle", {'data': data, 'id': request.sid}, broadcast=False)
+    emit("play_toggle", {'data': data, 'id': session.get('ID')}, broadcast=False)
 
 
 @socketio.on('show_class_id')
 def change_show_class_id(data):
     """event listener when client types a message"""
     print("data from the front end: ", str(data))
-    userConfig[request.sid]["show_class_id"] = data
-    emit("show_class_id", {'data': data, 'id': request.sid}, broadcast=False)
+    userConfig[session.get('ID')]["show_class_id"] = data
+    emit("show_class_id", {'data': data, 'id': session.get('ID')}, broadcast=False)
 
 
 @socketio.on('mode')
 def change_mode(data):
     """event listener when client types a message"""
     print("data from the front end: ", str(data))
-    userConfig[request.sid]["mode"] = data
-    emit("mode", {'data': data, 'id': request.sid}, broadcast=False)
+    userConfig[session.get('ID')]["mode"] = data
+    emit("mode", {'data': data, 'id': session.get('ID')}, broadcast=False)
 
 
 @socketio.on("disconnect")
 def disconnected():
     """event listener when client disconnects to the server"""
     with lock_users:
-        users.remove(request.sid)
-    del userConfig[request.sid]
-    print(f"client with id:{request.sid} has disconnected")
+        users.remove(session.get('ID'))
+    del userConfig[session.get('ID')]
+    print(f"client with id:{session.get('ID')} has disconnected")
     emit("disconnect", {
-         'data': f"user {request.sid} disconnected", 'id': request.sid}, broadcast=True)
+         'data': f"user {session.get('ID')} disconnected", 'id': session.get('ID')}, broadcast=True)
 
 
 def main(opt):

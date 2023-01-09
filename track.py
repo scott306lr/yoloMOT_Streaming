@@ -15,7 +15,7 @@ from pathlib import Path
 import torch
 import torch.backends.cudnn as cudnn
 import subprocess as sp
-from flask import Flask, request, jsonify, Response, render_template, render_template_string, session
+from flask import Flask, abort, redirect, request, jsonify, Response, render_template, render_template_string, session, url_for
 from flask_socketio import SocketIO, emit
 from flask_cors import CORS
 import threading
@@ -58,20 +58,23 @@ lock_users = threading.Lock()
 users = []
 userConfig = {}
 
-
+PASSWORD = "12345"
 TEMPLATE_DIR = "Frontend"#"templates"
 STATIC_DIR = "Frontend"
 # ASYNC_MODE = "eventlet"
 app = Flask(__name__, template_folder=TEMPLATE_DIR, static_folder=STATIC_DIR)
 app.config['SECRET_KEY'] = 'secret!'
 # app.config["DEBUG"] = True
-# CORS(app, resources={r"/*": {
-#     "origins": "*",
-#     "Access-Control-Allow-Origin": "*"
-# }})
-socketio = SocketIO(app, cors_allowed_origins="*") #async_mode=ASYNC_MODE, 
+CORS(app, resources={r"/*": {
+    "origins": "http://140.113.*",
+    "Access-Control-Allow-Origin": "*"
+}})
+socketio = SocketIO(app, cors_allowed_origins="http://140.113.*") #async_mode=ASYNC_MODE, 
 # socketio = SocketIO(app)
-socketio.init_app(app, cors_allowed_origins="*")
+socketio.init_app(app, cors_allowed_origins="http://140.113.*")
+
+
+
 
 @torch.no_grad()
 def run(
@@ -328,28 +331,34 @@ def generate(myID):
 
 from uuid import uuid4
 
-@app.route('/')
-def index():
-    # return the rendered template
+
+@app.route('/', methods=['GET', 'POST'])
+def login():
     if request.method == "GET":
-        new_user_id = str(uuid4())
-        session["ID"] = new_user_id
-        
-        with lock_users:
-            users.append(session.get('ID'))
-            userConfig[session.get('ID')] = {
-                "id": session.get('ID'),
-                "resolution": "480p",
-                "mode": "original",
-                "confidence": 0.5,
-                "play": True,
-                "show_class_id": [ i for i in range(0, 80) ]
-            }
-        with open('./Frontend/index.html', 'r') as file:
-            data = file.read().rstrip()
-            data = data.replace('USER_DEF_ID', new_user_id)
-            return render_template_string(data)
-        # return render_template("index.html")
+        return render_template('login.html')
+
+    if request.method == 'POST':
+        if request.form.get('password') == PASSWORD:
+            new_user_id = str(uuid4())
+            session["ID"] = new_user_id
+            
+            with lock_users:
+                users.append(session.get('ID'))
+                userConfig[session.get('ID')] = {
+                    "id": session.get('ID'),
+                    "resolution": "480p",
+                    "mode": "original",
+                    "confidence": 0.5,
+                    "play": True,
+                    "show_class_id": [ i for i in range(0, 80) ]
+                }
+            with open('./Frontend/index.html', 'r') as file:
+                data = file.read().rstrip()
+                data = data.replace('USER_DEF_ID', new_user_id)
+                return render_template_string(data)
+        else:
+            abort(403)
+
 
 # obtain id from the front end
 @app.route("/<myID>/video_feed")

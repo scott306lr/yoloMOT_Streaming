@@ -176,7 +176,7 @@ def run(
             if webcam:  # nr_sources >= 1
                 p, im0, _ = path[i], im0s[i].copy(), dataset.count
                 # p = Path(p)  # to Path
-                # s += f'{i}: '
+                s += f'{i}: '
                 # txt_file_name = p.name
                 # save_path = str(save_dir / p.name)  # im.jpg, vid.mp4, ...
             # else:
@@ -193,7 +193,7 @@ def run(
             curr_frames[i] = im0
 
             # txt_path = str(save_dir / 'tracks' / txt_file_name)  # im.txt
-            # s += '%gx%g ' % im.shape[2:]  # print string
+            s += '%gx%g ' % im.shape[2:]  # print string
             
             # annotator = Annotator(im0, line_width=line_thickness, example=str(names))
             frame_temp = im0.copy()
@@ -258,7 +258,6 @@ def draw_rectangles(frame, boxes, show_class_id, confidence):
         if c not in show_class_id:
             continue
         if box['conf'].cpu().numpy() < confidence:
-            # print("Out by confidence", box['conf'].numpy(), confidence)
             continue
         label = f"{box['id']} {names[c]} {box['conf']:.2f}"
         color = colors(c, True)
@@ -374,7 +373,7 @@ def connected():
 
 
 @socketio.on("confidence")
-def confidence(data):
+def change_confidence(data):
     with lock_users:
         userConfig[session.get('ID')]["confidence"] = float(data)
     emit("confidence", {'data': data, 'id': session.get('ID')}, broadcast=False)
